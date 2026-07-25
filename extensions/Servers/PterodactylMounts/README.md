@@ -31,9 +31,13 @@ cd /var/www/paymenter && composer dump-autoload
 ```
 
 Ou via l'administration Paymenter, `Extensions` puis l'envoi d'une archive ZIP du
-dossier `PterodactylMounts`.
+dossier `PterodactylMounts`. Sur une installation Docker, l'import par l'interface
+échoue tant que le correctif décrit dans le [README du dépôt](../../../README.md) n'est
+pas appliqué.
 
-L'extension apparaît ensuite dans `Admin > Servers` sous le nom **Pterodactyl (Mounts)**.
+L'extension n'apparaît pas dans la liste des extensions installées, c'est normal pour une
+extension de type serveur. Elle se trouve dans `Admin > Servers` sous le nom
+**Pterodactyl (Mounts)**, au moment de créer une entrée.
 
 ## Configuration
 
@@ -66,10 +70,19 @@ L'identifiant numérique du montage se lit dans l'URL de sa page d'administratio
 ### 3. Le produit
 
 Dans la configuration du produit, un champ **Mounts** a été ajouté en fin de formulaire.
-Y saisir les identifiants numériques, un par tag.
+C'est une liste déroulante à choix multiple, alimentée depuis le panel : elle ne propose
+que les montages réellement attachables sur l'egg et le node sélectionnés, affichés sous
+la forme `nom (cible)`. Choisir l'egg ou le node rafraîchit la liste.
+
+Si le produit déploie par localisation plutôt que sur un node fixe, le filtrage ne porte
+que sur l'egg. Un montage indisponible sur le node retenu au déploiement sera refusé à la
+création, et l'erreur ira dans les logs.
 
 Champ vide : aucun appel n'est fait, le comportement est identique à l'extension
 Pterodactyl officielle.
+
+Une liste vide ou un message d'erreur sous le champ signale que le panel n'a pas répondu.
+La description affichée indique alors la cause exacte.
 
 ## Comportement
 
