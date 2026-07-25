@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # One zip per extension, named after the extension folder. Paymenter's admin
+      # uploader expects an archive whose root holds the extension directory.
+      - name: Build extension archives
+        run: |
+          mkdir -p dist
+          for dir in extensions/*/*/; do
+            name=$(basename "$dir")
+            (cd "$(dirname "$dir")" && zip -r "$GITHUB_WORKSPACE/dist/$name.zip" "$name")
+          done
+          ls -l dist
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
