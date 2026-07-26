@@ -32,7 +32,7 @@ use Throwable;
 #[ExtensionMeta(
     name: 'Pterodactyl Advanced',
     description: 'Pterodactyl server extension with automatic mount attachment, single sign-on and managed accounts. Requires chredeur/pterodactyl-api-addon on the panel.',
-    version: '2.3.0',
+    version: '2.4.0',
     author: 'chredeur',
     url: 'https://github.com/chredeur/Paymenter-Extensions',
 )]
@@ -177,11 +177,9 @@ class PterodactylAdvanced extends Pterodactyl
                 'type' => 'button',
                 'label' => __('pterodactyladvanced::messages.actions.go_to_server'),
                 'url' => route('extensions.servers.pterodactyladvanced.sso', ['service' => $service->id]),
-            ],
-            [
-                'type' => 'button',
-                'label' => __('pterodactyladvanced::messages.actions.generate_sftp_password'),
-                'function' => 'resetSftpPassword',
+                // New tab, so the customer keeps the billing page open behind them. The
+                // theme adds rel="noopener noreferrer" on its own for _blank.
+                'target' => '_blank',
             ],
             [
                 'type' => 'view',
@@ -207,6 +205,7 @@ class PterodactylAdvanced extends Pterodactyl
         }
 
         return view('pterodactyladvanced::sftp', [
+            'service' => $service,
             'sftp' => $this->sftpDetails($service),
             'password' => session(self::SFTP_PASSWORD_KEY),
         ])->render();
@@ -217,7 +216,9 @@ class PterodactylAdvanced extends Pterodactyl
      *
      * A password cannot be read back, the panel only stores its hash, so the only thing
      * this can offer is a replacement. Any SFTP client still holding the previous one
-     * stops working, which is the expected trade-off.
+     * stops working, which is why the view asks for confirmation first.
+     *
+     * Reached over POST from the extension route, never from a link.
      */
     public function resetSftpPassword(Service $service)
     {
@@ -251,9 +252,7 @@ class PterodactylAdvanced extends Pterodactyl
             );
         }
 
-        // Returning a string makes the Livewire component redirect, which re-runs
-        // getActions() so the flashed password can be rendered.
-        return route('services.show', $service);
+        return redirect()->route('services.show', $service);
     }
 
     /**

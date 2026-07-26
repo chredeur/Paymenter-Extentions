@@ -3,7 +3,6 @@
 return [
     'actions' => [
         'go_to_server' => 'Go to server',
-        'generate_sftp_password' => 'Generate SFTP password',
     ],
 
     'sftp' => [
@@ -11,11 +10,16 @@ return [
         'intro' => 'Use these credentials in any SFTP client to manage your server files.',
         'address' => 'Address',
         'username' => 'Username',
+        'password' => 'Password',
         'unavailable' => 'The panel could not be reached, so the connection details are unavailable right now.',
         'copy' => 'Copy',
         'copied' => 'Copied',
+        'generate' => 'Generate a new password',
+        'confirm_title' => 'Replace the current SFTP password?',
+        'confirm_body' => 'A new password will be generated and shown once. Any SFTP client still using the previous password will stop working immediately.',
+        'confirm' => 'Generate',
+        'cancel' => 'Cancel',
         'new_password' => 'New password',
         'new_password_hint' => 'Copy it now, it is shown only once and cannot be retrieved later.',
-        'no_password_hint' => 'No password is set until you generate one with the button above. Generating a new one immediately stops any SFTP client still using the previous password.',
     ],
 ];

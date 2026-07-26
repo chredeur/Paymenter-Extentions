@@ -1,53 +1,76 @@
 @php
-    // Rendered inside the extension view container of the service page, which already
-    // provides the card background. Only padding is added here.
-    $rows = $sftp ? [
-        ['label' => __('pterodactyladvanced::messages.sftp.address'), 'value' => 'sftp://' . $sftp['host'] . ':' . $sftp['port']],
-        ['label' => __('pterodactyladvanced::messages.sftp.username'), 'value' => $sftp['username']],
-    ] : [];
-
     $copy = __('pterodactyladvanced::messages.sftp.copy');
     $copied = __('pterodactyladvanced::messages.sftp.copied');
 @endphp
 
-<div class="p-4">
-    <h4 class="text-lg font-semibold mb-1">{{ __('pterodactyladvanced::messages.sftp.title') }}</h4>
-    <p class="text-base/60 text-sm mb-4">{{ __('pterodactyladvanced::messages.sftp.intro') }}</p>
+<div class="p-6">
+    <h4 class="text-lg font-semibold">{{ __('pterodactyladvanced::messages.sftp.title') }}</h4>
+    <p class="text-base/50 text-sm mt-1">{{ __('pterodactyladvanced::messages.sftp.intro') }}</p>
 
     @if ($sftp)
-        <div class="flex flex-col gap-2">
-            @foreach ($rows as $row)
-                <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                    <span class="text-base/60 text-sm sm:w-28 shrink-0">{{ $row['label'] }}</span>
-                    <div class="flex items-center gap-2 min-w-0 flex-1">
-                        <code class="font-mono text-sm bg-primary-900/60 rounded px-2 py-1 truncate">{{ $row['value'] }}</code>
-                        <button type="button"
-                            data-copy="{{ $row['value'] }}"
-                            data-copied="{{ $copied }}"
-                            onclick="navigator.clipboard.writeText(this.dataset.copy);const t=this.textContent;this.textContent=this.dataset.copied;setTimeout(()=>this.textContent=t,1500)"
-                            class="text-xs text-base/60 hover:text-base border border-base/20 rounded px-2 py-1 shrink-0">{{ $copy }}</button>
-                    </div>
-                </div>
-            @endforeach
+        <div class="grid gap-3 mt-5 md:grid-cols-2">
+            @include('pterodactyladvanced::partials.copyable', [
+                'label' => __('pterodactyladvanced::messages.sftp.address'),
+                'value' => 'sftp://' . $sftp['host'] . ':' . $sftp['port'],
+                'copy' => $copy,
+                'copied' => $copied,
+            ])
+            @include('pterodactyladvanced::partials.copyable', [
+                'label' => __('pterodactyladvanced::messages.sftp.username'),
+                'value' => $sftp['username'],
+                'copy' => $copy,
+                'copied' => $copied,
+            ])
         </div>
     @else
-        <p class="text-base/70 text-sm">{{ __('pterodactyladvanced::messages.sftp.unavailable') }}</p>
+        <p class="text-base/70 text-sm mt-5">{{ __('pterodactyladvanced::messages.sftp.unavailable') }}</p>
     @endif
 
     @if ($password)
-        <div class="mt-4 rounded border border-yellow-500/40 bg-yellow-500/10 p-3">
-            <p class="text-sm font-semibold mb-1">{{ __('pterodactyladvanced::messages.sftp.new_password') }}</p>
-            <p class="text-base/70 text-xs mb-2">{{ __('pterodactyladvanced::messages.sftp.new_password_hint') }}</p>
-            <div class="flex items-center gap-2 min-w-0">
-                <code class="font-mono text-sm bg-primary-900/60 rounded px-2 py-1 truncate flex-1">{{ $password }}</code>
-                <button type="button"
-                    data-copy="{{ $password }}"
-                    data-copied="{{ $copied }}"
-                    onclick="navigator.clipboard.writeText(this.dataset.copy);const t=this.textContent;this.textContent=this.dataset.copied;setTimeout(()=>this.textContent=t,1500)"
-                    class="text-xs text-base/60 hover:text-base border border-base/20 rounded px-2 py-1 shrink-0">{{ $copy }}</button>
+        <div class="mt-5 rounded-lg border border-yellow-500/40 bg-yellow-600/20 p-4">
+            <p class="text-sm font-semibold text-yellow-300">{{ __('pterodactyladvanced::messages.sftp.new_password') }}</p>
+            <p class="text-yellow-300/70 text-sm mt-1 mb-3">{{ __('pterodactyladvanced::messages.sftp.new_password_hint') }}</p>
+            @include('pterodactyladvanced::partials.copyable', [
+                'label' => __('pterodactyladvanced::messages.sftp.password'),
+                'value' => $password,
+                'copy' => $copy,
+                'copied' => $copied,
+            ])
+        </div>
+    @endif
+
+    {{--
+        Plain form posting to the extension route rather than a Livewire action, so the
+        confirmation step is fully under our control and the reset can never be triggered
+        by a stray navigation.
+    --}}
+    <form method="POST"
+        action="{{ route('extensions.servers.pterodactyladvanced.sftp-password', $service) }}"
+        x-data="{ confirming: false }"
+        class="mt-6">
+        @csrf
+
+        <div x-show="!confirming">
+            <button type="button" @click="confirming = true"
+                class="flex items-center gap-2 justify-center bg-primary text-white text-sm font-semibold hover:bg-primary/80 py-2 px-4.5 rounded-md duration-300 cursor-pointer">
+                {{ __('pterodactyladvanced::messages.sftp.generate') }}
+            </button>
+        </div>
+
+        <div x-show="confirming" style="display: none"
+            class="rounded-lg border border-neutral bg-background p-4">
+            <p class="text-sm font-semibold">{{ __('pterodactyladvanced::messages.sftp.confirm_title') }}</p>
+            <p class="text-base/50 text-sm mt-1 mb-4">{{ __('pterodactyladvanced::messages.sftp.confirm_body') }}</p>
+            <div class="flex flex-wrap gap-2">
+                <button type="submit"
+                    class="bg-primary text-white text-sm font-semibold hover:bg-primary/80 py-2 px-4.5 rounded-md duration-300 cursor-pointer">
+                    {{ __('pterodactyladvanced::messages.sftp.confirm') }}
+                </button>
+                <button type="button" @click="confirming = false"
+                    class="border border-neutral text-sm text-base/70 hover:text-base hover:border-base/40 py-2 px-4.5 rounded-md duration-300 cursor-pointer">
+                    {{ __('pterodactyladvanced::messages.sftp.cancel') }}
+                </button>
             </div>
         </div>
-    @else
-        <p class="text-base/60 text-xs mt-4">{{ __('pterodactyladvanced::messages.sftp.no_password_hint') }}</p>
-    @endif
+    </form>
 </div>
