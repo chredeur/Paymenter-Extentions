@@ -6,8 +6,10 @@ use App\Attributes\ExtensionMeta;
 use App\Models\Service;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\Str;
 use Paymenter\Extensions\Servers\Pterodactyl\Pterodactyl;
 use Throwable;
@@ -30,7 +32,7 @@ use Throwable;
 #[ExtensionMeta(
     name: 'Pterodactyl Advanced',
     description: 'Pterodactyl server extension with automatic mount attachment, single sign-on and managed accounts. Requires chredeur/pterodactyl-api-addon on the panel.',
-    version: '2.2.0',
+    version: '2.3.0',
     author: 'chredeur',
     url: 'https://github.com/chredeur/Paymenter-Extensions',
 )]
@@ -51,6 +53,9 @@ class PterodactylAdvanced extends Pterodactyl
         if (!Route::has('extensions.servers.pterodactyladvanced.sso')) {
             require __DIR__ . '/routes.php';
         }
+
+        View::addNamespace('pterodactyladvanced', __DIR__ . '/resources/views');
+        Lang::addNamespace('pterodactyladvanced', __DIR__ . '/resources/lang');
     }
 
     /**
@@ -167,35 +172,44 @@ class PterodactylAdvanced extends Pterodactyl
      */
     public function getActions(Service $service)
     {
-        $actions = [
+        return [
             [
                 'type' => 'button',
-                'label' => 'Go to server',
+                'label' => __('pterodactyladvanced::messages.actions.go_to_server'),
                 'url' => route('extensions.servers.pterodactyladvanced.sso', ['service' => $service->id]),
             ],
             [
                 'type' => 'button',
-                'label' => 'Generate SFTP password',
+                'label' => __('pterodactyladvanced::messages.actions.generate_sftp_password'),
                 'function' => 'resetSftpPassword',
             ],
+            [
+                'type' => 'view',
+                'name' => 'sftp',
+                'label' => __('pterodactyladvanced::messages.sftp.title'),
+            ],
         ];
+    }
 
-        if ($sftp = $this->sftpDetails($service)) {
-            $actions[] = ['type' => 'text', 'label' => 'SFTP address', 'text' => $sftp['host'] . ':' . $sftp['port']];
-            $actions[] = ['type' => 'text', 'label' => 'SFTP username', 'text' => $sftp['username']];
+    /**
+     * Renders the SFTP panel of the service page.
+     *
+     * The plain label and value pairs offered by the theme are too cramped for
+     * credentials, so this ships its own markup with copy buttons.
+     *
+     * The password comes from the flash set by resetSftpPassword just before redirecting
+     * back here. It is shown once and stored nowhere: the panel only keeps its hash.
+     */
+    public function getView(Service $service, $settings, $properties, $name)
+    {
+        if ($name !== 'sftp') {
+            return '';
         }
 
-        // Flashed by resetSftpPassword just before redirecting back here. Shown once: it
-        // is not stored anywhere, the panel only keeps its hash.
-        if ($password = session(self::SFTP_PASSWORD_KEY)) {
-            $actions[] = [
-                'type' => 'text',
-                'label' => 'New SFTP password (shown once)',
-                'text' => $password,
-            ];
-        }
-
-        return $actions;
+        return view('pterodactyladvanced::sftp', [
+            'sftp' => $this->sftpDetails($service),
+            'password' => session(self::SFTP_PASSWORD_KEY),
+        ])->render();
     }
 
     /**

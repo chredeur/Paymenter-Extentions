@@ -97,6 +97,12 @@ l'addon du panel est installé.
 Le jeton est demandé au panel au moment du clic, pas au rendu de la page : il ne peut pas
 expirer pendant que le client lit sa page, et il n'apparaît jamais dans le HTML.
 
+**Une session déjà ouverte sur le panel dans le même navigateur est fermée.** Le lien SSO
+déconnecte puis reconnecte sur le compte visé — c'est voulu, il doit déposer le visiteur
+sur le bon compte et non sur celui qui traînait. En pratique, si tu es connecté en
+administrateur sur le panel et que tu testes le bouton, tu perds ta session admin. Teste
+en fenêtre privée.
+
 Le client est renvoyé vers la page de connexion normale du panel, sans message d'erreur,
 dans ces cas :
 
@@ -121,8 +127,9 @@ grep PterodactylAdvanced storage/logs/laravel.log
 
 ## Mot de passe SFTP
 
-La page du service affiche l'adresse SFTP et le nom d'utilisateur du client, ainsi qu'un
-bouton **Generate SFTP password**.
+La page du service affiche un panneau **SFTP** avec l'adresse au format
+`sftp://hote:port`, le nom d'utilisateur, et un bouton de copie sur chaque valeur. Un
+bouton **Générer un mot de passe SFTP** figure dans la barre d'actions.
 
 Le mot de passe existant ne peut pas être affiché : le panel n'en conserve que l'empreinte.
 Le bouton en génère donc un nouveau de 24 caractères, le pousse sur le compte via
@@ -134,6 +141,10 @@ cesse de fonctionner.
 
 Le nom d'utilisateur SFTP suit le format attendu par Pterodactyl, `{compte}.{identifiant}`.
 Le port provient du node, il vaut 2022 par défaut.
+
+L'affichage du panneau coûte trois appels à l'API du panel — serveur, node, utilisateur.
+Si le panel est injoignable, le panneau l'indique et le reste de la page fonctionne
+normalement.
 
 Cette fonction est le complément naturel des comptes gérés : le client n'a pas de mot de
 passe, et s'en génère un le jour où il a besoin du SFTP.
@@ -209,6 +220,15 @@ curl "https://panel.example.com/api/application/servers/12/mounts" \
   -H "Authorization: Bearer ptla_xxxxxxxxxxxxxxxxxxxx" \
   -H "Accept: application/json"
 ```
+
+## Traductions
+
+Les textes visibles par le client passent par le namespace `pterodactyladvanced`,
+enregistré au `boot()` de l'extension. Anglais et français sont fournis.
+
+Pour ajouter une langue, copier `resources/lang/en/messages.php` vers
+`resources/lang/{code}/messages.php` et traduire les valeurs. Paymenter retombe sur
+l'anglais pour toute clé manquante.
 
 ## Notes d'implémentation
 

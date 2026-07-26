@@ -6,7 +6,7 @@ Extensions pour [Paymenter](https://paymenter.org).
 
 | Extension | Type | Description | Version |
 | --- | --- | --- | --- |
-| [PterodactylAdvanced](extensions/Servers/PterodactylAdvanced) | Server | Extension Pterodactyl : montages automatiques, connexion automatique au panel et comptes gérés | 2.2.0 |
+| [PterodactylAdvanced](extensions/Servers/PterodactylAdvanced) | Server | Extension Pterodactyl : montages automatiques, connexion automatique au panel et comptes gérés | 2.3.0 |
 
 Chaque extension a son propre README avec sa configuration, ses dépendances et son
 diagnostic.
