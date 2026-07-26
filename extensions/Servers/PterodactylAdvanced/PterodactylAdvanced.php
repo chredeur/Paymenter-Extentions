@@ -1,34 +1,92 @@
 <?php
 
-namespace Paymenter\Extensions\Servers\PterodactylMounts;
+namespace Paymenter\Extensions\Servers\PterodactylAdvanced;
 
 use App\Attributes\ExtensionMeta;
 use App\Models\Service;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use Paymenter\Extensions\Servers\Pterodactyl\Pterodactyl;
 use Throwable;
 
 /**
- * Pterodactyl server extension with mount support.
+ * Pterodactyl server extension with mounts, single sign-on and managed accounts.
  *
- * Extends the built-in Pterodactyl extension shipped with Paymenter and adds a product
- * level "Mounts" field. After a server is created, the selected mounts are attached to it
- * through the application API.
+ * Extends the built-in Pterodactyl extension shipped with Paymenter and adds three
+ * things it does not cover:
  *
- * Attaching and listing mounts is not part of the Pterodactyl application API, it
- * requires the chredeur/pterodactyl-api-addon package installed on the panel.
+ *   - mounts selected per product and attached once the server is created;
+ *   - a "Go to server" button that opens the customer's panel session directly;
+ *   - optional managed accounts, created with a password that is never disclosed.
+ *
+ * None of these exist in the Pterodactyl application API, they require the
+ * chredeur/pterodactyl-api-addon package installed on the panel.
  *
  * @link https://github.com/chredeur/pterodactyl-api-addon
  */
 #[ExtensionMeta(
-    name: 'Pterodactyl (Mounts)',
-    description: 'Pterodactyl server extension that also attaches mounts to a server on creation. Requires chredeur/pterodactyl-api-addon on the panel.',
-    version: '1.1.0',
+    name: 'Pterodactyl Advanced',
+    description: 'Pterodactyl server extension with automatic mount attachment, single sign-on and managed accounts. Requires chredeur/pterodactyl-api-addon on the panel.',
+    version: '2.0.0',
     author: 'chredeur',
     url: 'https://github.com/chredeur/Paymenter-Extentions',
 )]
-class PterodactylMounts extends Pterodactyl
+class PterodactylAdvanced extends Pterodactyl
 {
+    /**
+     * Registers the single sign-on redirect route.
+     *
+     * Called from AppServiceProvider on every request, hence the guard.
+     */
+    public function boot()
+    {
+        if (!Route::has('extensions.servers.pterodactyladvanced.sso')) {
+            require __DIR__ . '/routes.php';
+        }
+    }
+
+    /**
+     * Adds the managed accounts switch to the server configuration.
+     */
+    public function getConfig($values = []): array
+    {
+        $config = parent::getConfig($values);
+
+        $config[] = [
+            'name' => 'managed_accounts',
+            'label' => 'Managed accounts',
+            'type' => 'checkbox',
+            'description' => 'Create panel accounts with a random password that is never disclosed, so customers reach the panel only through the Go to server button. Leaves them without SFTP password access until they register an SSH key on their account.',
+        ];
+
+        return $config;
+    }
+
+    /**
+     * Injects a password on account creation when managed accounts are enabled.
+     *
+     * UserCreationService only generates a password reset token, and only sends the
+     * "Setup Your Account" link, when no password is supplied. Providing one turns the
+     * email into a plain notice and leaves the customer with no password to manage.
+     *
+     * Done here rather than by overriding createServer, which would mean duplicating the
+     * whole provisioning routine to change a single call.
+     */
+    public function request($url, $method = 'get', $data = []): array
+    {
+        $creatingUser = strtolower($method) === 'post'
+            && rtrim($url, '/') === '/api/application/users'
+            && !isset($data['password']);
+
+        if ($creatingUser && filter_var($this->config('managed_accounts'), FILTER_VALIDATE_BOOLEAN)) {
+            $data['password'] = Str::password(32);
+        }
+
+        return parent::request($url, $method, $data);
+    }
+
     /**
      * Adds the mount field to the product configuration.
      */
@@ -80,7 +138,7 @@ class PterodactylMounts extends Pterodactyl
         try {
             $this->attachMounts($result['server'], $mounts);
         } catch (Throwable $e) {
-            Log::error('[PterodactylMounts] Failed to attach mounts: ' . $e->getMessage(), [
+            Log::error('[PterodactylAdvanced] Failed to attach mounts: ' . $e->getMessage(), [
                 'service_id' => $service->id,
                 'server_id' => $result['server'],
                 'mounts' => $mounts,
@@ -88,6 +146,57 @@ class PterodactylMounts extends Pterodactyl
         }
 
         return $result;
+    }
+
+    /**
+     * Replaces the panel link with one that signs the customer in on the way.
+     *
+     * The token is minted when the button is clicked rather than when the page renders,
+     * so it cannot go stale while the page sits open, and it never appears in the HTML.
+     */
+    public function getActions(Service $service)
+    {
+        return [
+            [
+                'type' => 'button',
+                'label' => 'Go to server',
+                'url' => route('extensions.servers.pterodactyladvanced.sso', ['service' => $service->id]),
+            ],
+        ];
+    }
+
+    /**
+     * Asks the panel for a single sign-on link and sends the customer to it.
+     *
+     * Falls back to the plain panel URL whenever a link cannot be obtained: the addon is
+     * missing, the panel is unreachable, or the account is not eligible because it has
+     * two-factor authentication enabled. The customer then signs in normally, which is
+     * the intended behaviour rather than an error.
+     */
+    public function ssoRedirect(Service $service)
+    {
+        abort_if($service->user_id !== Auth::id(), 403);
+
+        $host = rtrim($this->config('host'), '/');
+        $identifier = null;
+
+        try {
+            // getServer() is private on the parent, so the lookup is repeated here.
+            $server = $this->request('/api/application/servers/external/' . $service->id);
+            $identifier = $server['attributes']['identifier'] ?? null;
+
+            $sso = $this->request('/api/application/users/' . $server['attributes']['user'] . '/sso', 'post', [
+                'redirect' => '/server/' . $identifier,
+            ]);
+
+            return redirect()->away($sso['attributes']['url']);
+        } catch (Throwable $e) {
+            Log::info('[PterodactylAdvanced] Single sign-on unavailable, falling back to the panel: ' . $e->getMessage(), [
+                'service_id' => $service->id,
+            ]);
+
+            return redirect()->away($identifier ? $host . '/server/' . $identifier : $host);
+        }
     }
 
     /**

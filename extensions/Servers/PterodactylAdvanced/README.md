@@ -1,19 +1,23 @@
-# Pterodactyl (Mounts)
+# Pterodactyl Advanced
 
 Extension serveur Paymenter qui reprend l'extension Pterodactyl officielle et y ajoute
-l'attache automatique de montages (mounts) à la création du serveur.
+trois choses qu'elle ne couvre pas :
 
-Cas d'usage : monter un `.jar` protégé — Velocity, plugin propriétaire, configuration
-partagée — sur chaque serveur provisionné, sans intervention manuelle et sans que le
-client puisse le retirer depuis le gestionnaire de fichiers ou le SFTP.
+- **Montages** sélectionnés par produit et attachés à la création du serveur. Permet de
+  monter un `.jar` protégé — Velocity, plugin propriétaire, configuration partagée — sur
+  chaque serveur provisionné, sans intervention manuelle et sans que le client puisse le
+  retirer depuis le gestionnaire de fichiers ou le SFTP.
+- **Connexion automatique** : le bouton « Go to server » ouvre directement la session du
+  client sur le panel, sans mot de passe.
+- **Comptes gérés**, en option : le compte Pterodactyl est créé avec un mot de passe
+  jamais communiqué, le client n'a donc rien à gérer.
 
-- Type : `Server`
-- Testé avec : Paymenter 1.5.7, Pterodactyl 1.14.1
+Type : `Server`. Testé avec Paymenter 1.5.7 et Pterodactyl 1.14.1.
 
 ## Dépendance obligatoire
 
-Pterodactyl n'expose aucun endpoint d'API applicative pour attacher un montage. Cette
-extension s'appuie sur l'addon :
+Pterodactyl n'expose aucun endpoint d'API applicative pour attacher un montage ni pour
+ouvrir une session. Cette extension s'appuie sur l'addon :
 
 **[chredeur/pterodactyl-api-addon](https://github.com/chredeur/pterodactyl-api-addon)**
 
@@ -26,24 +30,24 @@ logs Paymenter.
 Copier le dossier dans l'installation Paymenter :
 
 ```bash
-cp -r extensions/Servers/PterodactylMounts /var/www/paymenter/extensions/Servers/
+cp -r extensions/Servers/PterodactylAdvanced /var/www/paymenter/extensions/Servers/
 cd /var/www/paymenter && composer dump-autoload
 ```
 
 Ou via l'administration Paymenter, `Extensions` puis l'envoi d'une archive ZIP du
-dossier `PterodactylMounts`. Sur une installation Docker, l'import par l'interface
+dossier `PterodactylAdvanced`. Sur une installation Docker, l'import par l'interface
 échoue tant que le correctif décrit dans le [README du dépôt](../../../README.md) n'est
 pas appliqué.
 
 L'extension n'apparaît pas dans la liste des extensions installées, c'est normal pour une
 extension de type serveur. Elle se trouve dans `Admin > Servers` sous le nom
-**Pterodactyl (Mounts)**, au moment de créer une entrée.
+**Pterodactyl Advanced**, au moment de créer une entrée.
 
 ## Configuration
 
 ### 1. Le serveur
 
-Dans `Admin > Servers`, créer une entrée avec l'extension `PterodactylMounts` :
+Dans `Admin > Servers`, créer une entrée avec l'extension `PterodactylAdvanced` :
 
 | Champ | Valeur |
 | --- | --- |
@@ -84,6 +88,60 @@ Pterodactyl officielle.
 Une liste vide ou un message d'erreur sous le champ signale que le panel n'a pas répondu.
 La description affichée indique alors la cause exacte.
 
+## Connexion automatique
+
+Le bouton **Go to server** de la page du service ouvre la session du client sur le panel
+au lieu de le déposer sur une page de connexion. Rien à configurer, c'est actif dès que
+l'addon du panel est installé.
+
+Le jeton est demandé au panel au moment du clic, pas au rendu de la page : il ne peut pas
+expirer pendant que le client lit sa page, et il n'apparaît jamais dans le HTML.
+
+Le client est renvoyé vers la page de connexion normale du panel, sans message d'erreur,
+dans ces cas :
+
+- son compte a activé la double authentification — l'auto-connexion ne doit pas la
+  contourner, et elle ne le peut pas techniquement ;
+- son compte est administrateur ;
+- l'addon n'est pas installé sur le panel, ou celui-ci est injoignable.
+
+Le motif est journalisé avec le préfixe `[PterodactylAdvanced]`.
+
+### Comptes gérés
+
+Case **Managed accounts** dans la configuration du serveur, désactivée par défaut.
+
+Une fois cochée, les comptes du panel sont créés avec un mot de passe aléatoire qui n'est
+jamais communiqué. Le client n'a donc rien à gérer : il passe par Paymenter, clique sur
+**Go to server**, et arrive dans son serveur.
+
+Le mécanisme repose sur le comportement de `UserCreationService` : il ne génère un jeton
+de réinitialisation, et n'envoie le lien « Setup Your Account », que si aucun mot de passe
+n'est fourni. En fournir un transforme l'e-mail en simple notification de création.
+
+Trois conséquences à connaître avant de cocher :
+
+**Plus de SFTP par mot de passe.** Pterodactyl authentifie le SFTP par mot de passe du
+panel ou par clé SSH. Sans mot de passe, le client doit enregistrer une clé SSH depuis son
+compte — accessible via la connexion automatique. Si tes clients utilisent le SFTP,
+préviens-les.
+
+**Le client peut toujours s'en créer un.** La procédure « mot de passe oublié » du panel
+reste ouverte et lui enverra un lien de réinitialisation. Ce n'est pas un verrou, c'est un
+défaut de configuration : le compte n'a pas de mot de passe tant que personne n'en demande
+un. Fermer cette porte demanderait de modifier le panel, et laisserait le client sans
+aucun recours si Paymenter tombe.
+
+**Paymenter devient le seul accès.** Si Paymenter est indisponible, tes clients n'ont plus
+de chemin vers leurs serveurs, sauf à passer par la réinitialisation de mot de passe.
+
+### Si les mots de passe ne partent pas
+
+Sans la case cochée, le panel envoie un lien de création de mot de passe via la
+notification `AccountCreated`. Elle implémente `ShouldQueue` : sans worker de file
+d'attente actif sur le panel, l'e-mail n'est jamais envoyé, sans aucune erreur visible.
+Vérifie `systemctl status pteroq` et la configuration `MAIL_*` du panel.
+
 ## Comportement
 
 L'attache a lieu après la création du serveur, en un seul appel à
@@ -93,7 +151,7 @@ L'attache a lieu après la création du serveur, en un seul appel à
 - **Idempotent.** Un montage déjà présent n'est pas dupliqué.
 - **Non bloquant.** Un échec d'attache n'annule pas la création du serveur : celui-ci
   existe déjà côté panel, échouer laisserait un serveur orphelin. L'erreur est écrite
-  dans `storage/logs/laravel.log` avec le préfixe `[PterodactylMounts]`.
+  dans `storage/logs/laravel.log` avec le préfixe `[PterodactylAdvanced]`.
 
 ### Prise en compte par Wings
 
@@ -105,7 +163,7 @@ Sur un serveur déjà en fonctionnement, un redémarrage est nécessaire.
 
 ## Diagnostic
 
-Les erreurs sont journalisées avec le préfixe `[PterodactylMounts]`.
+Les erreurs sont journalisées avec le préfixe `[PterodactylAdvanced]`.
 
 | Message | Cause |
 | --- | --- |

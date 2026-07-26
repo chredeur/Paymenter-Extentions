@@ -6,7 +6,7 @@ Extensions pour [Paymenter](https://paymenter.org).
 
 | Extension | Type | Description | Version |
 | --- | --- | --- | --- |
-| [PterodactylMounts](extensions/Servers/PterodactylMounts) | Server | Extension Pterodactyl avec attache automatique de montages à la création du serveur | 1.1.0 |
+| [PterodactylAdvanced](extensions/Servers/PterodactylAdvanced) | Server | Extension Pterodactyl : montages automatiques, connexion automatique au panel et comptes gérés | 2.0.0 |
 
 Chaque extension a son propre README avec sa configuration, ses dépendances et son
 diagnostic.
@@ -19,8 +19,9 @@ extension par simple copie :
 ```
 extensions/
 ├── Servers/
-│   └── PterodactylMounts/
-│       ├── PterodactylMounts.php
+│   └── PterodactylAdvanced/
+│       ├── PterodactylAdvanced.php
+│       ├── routes.php
 │       └── README.md
 ├── Gateways/
 └── Others/
@@ -35,7 +36,7 @@ Les trois types sont `Servers`, `Gateways` et `Others`.
 ### Par copie
 
 ```bash
-cp -r extensions/Servers/PterodactylMounts /var/www/paymenter/extensions/Servers/
+cp -r extensions/Servers/PterodactylAdvanced /var/www/paymenter/extensions/Servers/
 cd /var/www/paymenter && composer dump-autoload
 ```
 
