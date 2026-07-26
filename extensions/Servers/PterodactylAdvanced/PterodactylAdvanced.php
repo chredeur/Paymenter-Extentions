@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Str;
 use Paymenter\Extensions\Servers\Pterodactyl\Pterodactyl;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
 
 /**
@@ -32,7 +33,7 @@ use Throwable;
 #[ExtensionMeta(
     name: 'Pterodactyl Advanced',
     description: 'Pterodactyl server extension with automatic mount attachment, single sign-on and managed accounts. Requires chredeur/pterodactyl-api-addon on the panel.',
-    version: '2.4.0',
+    version: '2.4.1',
     author: 'chredeur',
     url: 'https://github.com/chredeur/Paymenter-Extensions',
 )]
@@ -228,6 +229,29 @@ class PterodactylAdvanced extends Pterodactyl
             $server = $this->request('/api/application/servers/external/' . $service->id);
             $user = $this->request('/api/application/users/' . $server['attributes']['user']);
 
+            // The panel account behind a service is normally a plain customer account, but
+            // nothing guarantees it: a server created by hand, or handed over afterwards,
+            // can belong to an administrator. A reset would hand that account's password
+            // to the customer, which is an interactive administrator session rather than a
+            // file transfer. Refused for the same reason the addon refuses these accounts
+            // a single sign-on link. The view hides the button when it already knows, so
+            // reaching this point means a request built by hand.
+            if ($user['attributes']['root_admin'] ?? false) {
+                Log::warning('[PterodactylAdvanced] Refused an SFTP password reset on an administrator account.', [
+                    'service_id' => $service->id,
+                    'panel_user_id' => $user['attributes']['id'],
+                ]);
+
+                $this->notifyStaff(
+                    'SFTP password reset refused',
+                    'Service #' . $service->id . ' is attached to the administrator panel account '
+                        . $user['attributes']['username'] . '. The reset was refused, as it would have '
+                        . 'disclosed an administrator password to the customer.'
+                );
+
+                abort(403);
+            }
+
             $password = Str::random(24);
 
             // email, username, first_name and last_name stay "required" on update, so the
@@ -241,6 +265,10 @@ class PterodactylAdvanced extends Pterodactyl
             ]);
 
             session()->flash(self::SFTP_PASSWORD_KEY, $password);
+        } catch (HttpException $e) {
+            // The refusal above, which must reach the customer as a 403 rather than be
+            // reported as a panel failure by the handler below.
+            throw $e;
         } catch (Throwable $e) {
             Log::error('[PterodactylAdvanced] Failed to reset the SFTP password: ' . $e->getMessage(), [
                 'service_id' => $service->id,
@@ -260,7 +288,10 @@ class PterodactylAdvanced extends Pterodactyl
      * be reached. The username format is the one parsed by the panel: account username,
      * a dot, then the short server identifier.
      *
-     * @return array{host: string, port: int, username: string}|null
+     * root_admin comes along so the view can drop the reset button on the accounts
+     * resetSftpPassword refuses, rather than offering a button that answers 403.
+     *
+     * @return array{host: string, port: int, username: string, root_admin: bool}|null
      */
     protected function sftpDetails(Service $service): ?array
     {
@@ -273,6 +304,7 @@ class PterodactylAdvanced extends Pterodactyl
                 'host' => $node['attributes']['fqdn'],
                 'port' => $node['attributes']['daemon_sftp'],
                 'username' => $user['attributes']['username'] . '.' . $server['attributes']['identifier'],
+                'root_admin' => (bool) ($user['attributes']['root_admin'] ?? false),
             ];
         } catch (Throwable $e) {
             return null;

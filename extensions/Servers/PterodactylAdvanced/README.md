@@ -139,6 +139,14 @@ page. Il n'est stocké nulle part.
 Conséquence à annoncer au client : tout client SFTP configuré avec l'ancien mot de passe
 cesse de fonctionner.
 
+**Les comptes administrateurs sont refusés**, comme pour la connexion automatique. Rien ne
+garantit que le compte panel derrière un service soit un compte client : un serveur créé à
+la main, ou transféré ensuite, peut appartenir à un administrateur. Générer un mot de passe
+reviendrait alors à afficher un mot de passe d'administrateur au client, soit une session
+d'administration complète et non un accès aux fichiers. Le panneau remplace le bouton par
+une explication, et la route répond `403` si la requête est fabriquée à la main. Le refus
+est journalisé en `warning` et déclenche une notification côté administration.
+
 Le nom d'utilisateur SFTP suit le format attendu par Pterodactyl, `{compte}.{identifiant}`.
 Le port provient du node, il vaut 2022 par défaut.
 

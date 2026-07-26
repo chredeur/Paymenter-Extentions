@@ -40,6 +40,14 @@
     @endif
 
     {{--
+        An administrator panel account is never reset from here: the new password would be
+        an administrator password shown to the customer. The controller refuses it too,
+        this only avoids offering a button that answers 403.
+    --}}
+    @if ($sftp && $sftp['root_admin'])
+        <p class="text-base/70 text-sm mt-5">{{ __('pterodactyladvanced::messages.sftp.admin_account') }}</p>
+    @else
+    {{--
         Plain form posting to the extension route rather than a Livewire action, so the
         confirmation step is fully under our control and the reset can never be triggered
         by a stray navigation.
@@ -73,4 +81,5 @@
             </div>
         </div>
     </form>
+    @endif
 </div>

@@ -12,6 +12,7 @@ return [
         'username' => 'Username',
         'password' => 'Password',
         'unavailable' => 'The panel could not be reached, so the connection details are unavailable right now.',
+        'admin_account' => 'This server belongs to an administrator account on the panel. Its password can only be changed from the panel itself.',
         'copy' => 'Copy',
         'copied' => 'Copied',
         'generate' => 'Generate a new password',

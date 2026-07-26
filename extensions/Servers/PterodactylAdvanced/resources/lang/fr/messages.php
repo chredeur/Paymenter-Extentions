@@ -12,6 +12,7 @@ return [
         'username' => 'Utilisateur',
         'password' => 'Mot de passe',
         'unavailable' => 'Le panel est injoignable, les informations de connexion ne sont pas disponibles pour le moment.',
+        'admin_account' => 'Ce serveur appartient à un compte administrateur du panel. Son mot de passe ne peut être modifié que depuis le panel lui-même.',
         'copy' => 'Copier',
         'copied' => 'Copié',
         'generate' => 'Générer un nouveau mot de passe',
