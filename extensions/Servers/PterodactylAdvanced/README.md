@@ -105,7 +105,38 @@ dans ces cas :
 - son compte est administrateur ;
 - l'addon n'est pas installé sur le panel, ou celui-ci est injoignable.
 
-Le motif est journalisé avec le préfixe `[PterodactylAdvanced]`.
+Le motif est journalisé en `error` avec le préfixe `[PterodactylAdvanced]`.
+
+Si la personne qui déclenche le repli dispose d'un rôle d'administration, une notification
+rouge persistante est également émise. Elle apparaît dans le panneau d'administration
+Paymenter, au chargement de page suivant — Filament ne rend ses notifications que là, le
+thème client ne les affiche pas, un client ne peut donc jamais la voir.
+
+Rien n'est affiché quand l'échec survient hors requête, pendant un provisionnement en file
+d'attente par exemple. Le journal reste la trace fiable :
+
+```bash
+grep PterodactylAdvanced storage/logs/laravel.log
+```
+
+## Mot de passe SFTP
+
+La page du service affiche l'adresse SFTP et le nom d'utilisateur du client, ainsi qu'un
+bouton **Generate SFTP password**.
+
+Le mot de passe existant ne peut pas être affiché : le panel n'en conserve que l'empreinte.
+Le bouton en génère donc un nouveau de 24 caractères, le pousse sur le compte via
+`PATCH /api/application/users/{id}`, et l'affiche **une seule fois** au rechargement de la
+page. Il n'est stocké nulle part.
+
+Conséquence à annoncer au client : tout client SFTP configuré avec l'ancien mot de passe
+cesse de fonctionner.
+
+Le nom d'utilisateur SFTP suit le format attendu par Pterodactyl, `{compte}.{identifiant}`.
+Le port provient du node, il vaut 2022 par défaut.
+
+Cette fonction est le complément naturel des comptes gérés : le client n'a pas de mot de
+passe, et s'en génère un le jour où il a besoin du SFTP.
 
 ### Comptes gérés
 

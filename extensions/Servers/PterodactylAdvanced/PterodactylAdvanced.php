@@ -4,6 +4,7 @@ namespace Paymenter\Extensions\Servers\PterodactylAdvanced;
 
 use App\Attributes\ExtensionMeta;
 use App\Models\Service;
+use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
@@ -29,12 +30,17 @@ use Throwable;
 #[ExtensionMeta(
     name: 'Pterodactyl Advanced',
     description: 'Pterodactyl server extension with automatic mount attachment, single sign-on and managed accounts. Requires chredeur/pterodactyl-api-addon on the panel.',
-    version: '2.0.0',
+    version: '2.2.0',
     author: 'chredeur',
     url: 'https://github.com/chredeur/Paymenter-Extensions',
 )]
 class PterodactylAdvanced extends Pterodactyl
 {
+    /**
+     * Session key carrying a freshly generated SFTP password across the redirect.
+     */
+    private const SFTP_PASSWORD_KEY = 'pterodactyl_advanced.sftp_password';
+
     /**
      * Registers the single sign-on redirect route.
      *
@@ -143,6 +149,11 @@ class PterodactylAdvanced extends Pterodactyl
                 'server_id' => $result['server'],
                 'mounts' => $mounts,
             ]);
+
+            $this->notifyStaff(
+                'Pterodactyl mounts were not attached',
+                'Service #' . $service->id . ' was created but its mounts could not be attached. ' . $e->getMessage()
+            );
         }
 
         return $result;
@@ -156,13 +167,103 @@ class PterodactylAdvanced extends Pterodactyl
      */
     public function getActions(Service $service)
     {
-        return [
+        $actions = [
             [
                 'type' => 'button',
                 'label' => 'Go to server',
                 'url' => route('extensions.servers.pterodactyladvanced.sso', ['service' => $service->id]),
             ],
+            [
+                'type' => 'button',
+                'label' => 'Generate SFTP password',
+                'function' => 'resetSftpPassword',
+            ],
         ];
+
+        if ($sftp = $this->sftpDetails($service)) {
+            $actions[] = ['type' => 'text', 'label' => 'SFTP address', 'text' => $sftp['host'] . ':' . $sftp['port']];
+            $actions[] = ['type' => 'text', 'label' => 'SFTP username', 'text' => $sftp['username']];
+        }
+
+        // Flashed by resetSftpPassword just before redirecting back here. Shown once: it
+        // is not stored anywhere, the panel only keeps its hash.
+        if ($password = session(self::SFTP_PASSWORD_KEY)) {
+            $actions[] = [
+                'type' => 'text',
+                'label' => 'New SFTP password (shown once)',
+                'text' => $password,
+            ];
+        }
+
+        return $actions;
+    }
+
+    /**
+     * Sets a new SFTP password on the customer's panel account and shows it once.
+     *
+     * A password cannot be read back, the panel only stores its hash, so the only thing
+     * this can offer is a replacement. Any SFTP client still holding the previous one
+     * stops working, which is the expected trade-off.
+     */
+    public function resetSftpPassword(Service $service)
+    {
+        abort_if($service->user_id !== Auth::id(), 403);
+
+        try {
+            $server = $this->request('/api/application/servers/external/' . $service->id);
+            $user = $this->request('/api/application/users/' . $server['attributes']['user']);
+
+            $password = Str::random(24);
+
+            // email, username, first_name and last_name stay "required" on update, so the
+            // current values are sent back untouched alongside the new password.
+            $this->request('/api/application/users/' . $user['attributes']['id'], 'patch', [
+                'email' => $user['attributes']['email'],
+                'username' => $user['attributes']['username'],
+                'first_name' => $user['attributes']['first_name'],
+                'last_name' => $user['attributes']['last_name'],
+                'password' => $password,
+            ]);
+
+            session()->flash(self::SFTP_PASSWORD_KEY, $password);
+        } catch (Throwable $e) {
+            Log::error('[PterodactylAdvanced] Failed to reset the SFTP password: ' . $e->getMessage(), [
+                'service_id' => $service->id,
+            ]);
+
+            $this->notifyStaff(
+                'SFTP password reset failed',
+                'Service #' . $service->id . '. ' . $e->getMessage()
+            );
+        }
+
+        // Returning a string makes the Livewire component redirect, which re-runs
+        // getActions() so the flashed password can be rendered.
+        return route('services.show', $service);
+    }
+
+    /**
+     * Returns the SFTP address and username of the service, or null if the panel cannot
+     * be reached. The username format is the one parsed by the panel: account username,
+     * a dot, then the short server identifier.
+     *
+     * @return array{host: string, port: int, username: string}|null
+     */
+    protected function sftpDetails(Service $service): ?array
+    {
+        try {
+            $server = $this->request('/api/application/servers/external/' . $service->id);
+            $node = $this->request('/api/application/nodes/' . $server['attributes']['node']);
+            $user = $this->request('/api/application/users/' . $server['attributes']['user']);
+
+            return [
+                'host' => $node['attributes']['fqdn'],
+                'port' => $node['attributes']['daemon_sftp'],
+                'username' => $user['attributes']['username'] . '.' . $server['attributes']['identifier'],
+            ];
+        } catch (Throwable $e) {
+            return null;
+        }
     }
 
     /**
@@ -191,12 +292,43 @@ class PterodactylAdvanced extends Pterodactyl
 
             return redirect()->away($sso['attributes']['url']);
         } catch (Throwable $e) {
-            Log::info('[PterodactylAdvanced] Single sign-on unavailable, falling back to the panel: ' . $e->getMessage(), [
+            // Logged as an error rather than info: the customer still reaches the panel,
+            // but the feature is not doing its job and that must not go unnoticed.
+            Log::error('[PterodactylAdvanced] Single sign-on unavailable, falling back to the panel: ' . $e->getMessage(), [
                 'service_id' => $service->id,
             ]);
 
+            $this->notifyStaff(
+                'Pterodactyl single sign-on failed',
+                'Service #' . $service->id . ' fell back to a plain panel link. ' . $e->getMessage()
+            );
+
             return redirect()->away($identifier ? $host . '/server/' . $identifier : $host);
         }
+    }
+
+    /**
+     * Raises a notification for staff only.
+     *
+     * Filament renders notifications in the admin panel, and the client theme does not
+     * render them at all, so a customer is never shown one. The role check mirrors how
+     * Paymenter itself decides admin panel access, in User::canAccessPanel().
+     *
+     * Nothing is shown when the failure happens outside a request, during queued
+     * provisioning for instance. The log entry remains the reliable trace.
+     */
+    protected function notifyStaff(string $title, string $body): void
+    {
+        if (is_null(Auth::user()?->role)) {
+            return;
+        }
+
+        Notification::make()
+            ->danger()
+            ->persistent()
+            ->title($title)
+            ->body($body)
+            ->send();
     }
 
     /**
@@ -218,10 +350,14 @@ class PterodactylAdvanced extends Pterodactyl
      * an egg is picked, or when the product deploys by location instead of a fixed node,
      * the list is wider and an ineligible mount is rejected at creation time.
      *
+     * Paymenter passes null while no product value has been entered yet, so the argument
+     * is not typed and is normalised here.
+     *
      * @return array{options: array<int, string>, description: string}
      */
-    protected function fetchMounts(array $values): array
+    protected function fetchMounts($values): array
     {
+        $values = is_array($values) ? $values : [];
         $query = [];
 
         if (!empty($values['egg_id'])) {
