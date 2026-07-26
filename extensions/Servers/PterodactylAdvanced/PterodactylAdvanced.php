@@ -31,7 +31,7 @@ use Throwable;
     description: 'Pterodactyl server extension with automatic mount attachment, single sign-on and managed accounts. Requires chredeur/pterodactyl-api-addon on the panel.',
     version: '2.0.0',
     author: 'chredeur',
-    url: 'https://github.com/chredeur/Paymenter-Extentions',
+    url: 'https://github.com/chredeur/Paymenter-Extensions',
 )]
 class PterodactylAdvanced extends Pterodactyl
 {

@@ -45,7 +45,7 @@ cd /var/www/paymenter && composer dump-autoload
 Dans l'administration Paymenter, `Extensions`, puis envoyer une archive ZIP du dossier de
 l'extension. L'archive doit contenir le dossier lui-même à sa racine, pas son contenu en
 vrac. Les archives sont également publiées sur la page
-[Releases](https://github.com/chredeur/Paymenter-Extentions/releases).
+[Releases](https://github.com/chredeur/Paymenter-Extensions/releases).
 
 Une extension de type `Server` ou `Gateway` n'apparaît pas dans la liste des extensions
 installées après l'import : seules celles de type `Other` y figurent. Elle se retrouve
